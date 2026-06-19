@@ -18,6 +18,11 @@ server.add_middleware(
     allow_headers=["*"],
 )
 
+# Tambahkan ini tepat di bawah konfigurasi CORS Anda
+@server.get("/")
+def read_root():
+    return {"status": "healthy", "message": "LangGraph API Backend is running successfully!"}
+
 # 1. MODEL DATA (Skema JSON untuk Request)
 class StartRequest(BaseModel):
     saham_target: str
