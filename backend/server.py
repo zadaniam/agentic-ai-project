@@ -4,8 +4,19 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from main import app  # Mengimpor graf LangGraph Anda dari main.py
+from fastapi.middleware.cors import CORSMiddleware
+
 
 server = FastAPI(title="LangGraph API for Telegram Bot")
+
+# Tambahkan CORS agar frontend Streamlit Anda bisa memanggil API ini
+server.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Bisa diganti dengan URL Streamlit Anda nanti
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 1. MODEL DATA (Skema JSON untuk Request)
 class StartRequest(BaseModel):
