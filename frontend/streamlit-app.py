@@ -1,12 +1,14 @@
 import streamlit as st
 import requests
 
+URL_BACKEND="https://agentic-ai-project-backend.onrender.com/api/research"
+
 st.title("📊 AI Financial Agent")
 
 saham = st.text_input("Masukkan kode saham:", "TSLA")
 
 if st.button("🚀 Mulai Analisis"):
-    res = requests.post("http://127.0.0.1:8000/api/research/start", 
+    res = requests.post(f"{URL_BACKEND}/start", 
                        json={"saham_target": saham})
     data = res.json()
     
@@ -29,7 +31,7 @@ if st.session_state.get("fase") == "hitl":
     
     with col1:
         if st.button("✅ Setujui & Lanjutkan"):
-            res = requests.post("http://127.0.0.1:8000/api/research/continue", json={
+            res = requests.post(f"{URL_BACKEND}/continue", json={
                 "thread_id": st.session_state.thread_id,
                 "action": "approve",
                 "harga_koreksi": harga_koreksi or None,
