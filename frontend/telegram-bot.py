@@ -1,16 +1,17 @@
 # frontend_telegram/bot.py
 import logging
-import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-
 import os
+import requests
 from dotenv import load_dotenv
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+
 load_dotenv()
 
-# Mengambil kunci API dari file .env secara aman
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-URL_BACKEND = "http://127.0.0.1:8000/api/research"
+
+# === PERBAIKAN: Menggunakan URL Backend Render yang Sudah Live ===
+URL_BACKEND = "https://agentic-ai-project-backend.onrender.com/api/research"
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -19,23 +20,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 Halo! Saya AI Financial Agent Bot.\n"
         "Silakan ketik kode saham yang ingin Anda teliti.\nContoh: `TSLA` atau `NVDA`"
     )
-
+    
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     saham = update.message.text.upper().strip()
+    
+    # Validasi: Kode saham umumnya hanya berupa huruf dan panjangnya 3-5 karakter
+    if not saham.isalpha() or len(saham) < 4 or len(saham) > 4:
+        await update.message.reply_text("⚠️ Kode saham tidak valid. Silakan masukkan kode saham yang benar (Contoh: BBCA, NVDA, TSLA).")
+        return
+        
     await update.message.reply_text(f"🚀 Memulai analisis paralel untuk saham {saham}...")
 
-    # 1. Panggil FastAPI Backend untuk Mulai Graf
     try:
         res = requests.post(f"{URL_BACKEND}/start", json={"saham_target": saham})
         if res.status_code == 200:
             hasil = res.json()
             thread_id = hasil["thread_id"]
-            
-            # Simpan data ke memori chat user sementara
-            context.user_data["thread_id"] = thread_id
-            context.user_data["berita_saham"] = hasil["berita_saham"]
 
-            # 2. Tampilkan hasil interupsi ke pengguna Telegram
             pesan_jeda = (
                 f"🛑 *[INTERUPSI HITL]*\n\n"
                 f"📊 *Data Harga:* {hasil['harga_saham']}\n\n"
@@ -43,10 +44,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Apakah Anda menyetujui data ini untuk dilanjutkan ke Manajer Investasi?"
             )
             
-            # Buat tombol interaktif di Telegram
+            # === PERBAIKAN: Menyimpan aksi dan thread_id ke dalam callback_data agar tidak tertukar antar user ===
             keyboard = [
-                [InlineKeyboardButton("✅ Setujui & Lanjutkan", callback_data="approve")],
-                [InlineKeyboardButton("❌ Batalkan Proses", callback_data="cancel")]
+                [InlineKeyboardButton("✅ Setujui & Lanjutkan", callback_data=f"approve:{thread_id}")],
+                [InlineKeyboardButton("❌ Batalkan Proses", callback_data=f"cancel:{thread_id}")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -60,17 +61,21 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    thread_id = context.user_data.get("thread_id")
-    action = query.data
+    # === PERBAIKAN: Membongkar data aksi dan thread_id dari callback_data ===
+    data_tombol = query.data.split(":")
+    action = data_tombol[0]
+    thread_id = data_tombol[1]
 
     if action == "cancel":
-        requests.post(f"{URL_BACKEND}/continue", json={"thread_id": thread_id, "action": "cancel"})
+        try:
+            requests.post(f"{URL_BACKEND}/continue", json={"thread_id": thread_id, "action": "cancel"})
+        except Exception:
+            pass
         await query.edit_message_text(text="❌ Analisis dibatalkan oleh pengguna.")
         return
 
     await query.edit_message_text(text="👨‍💼 Manajer Investasi sedang merumuskan laporan akhir di server...")
 
-    # 3. Panggil FastAPI Backend untuk Meneruskan Graf
     try:
         payload = {"thread_id": thread_id, "action": "approve"}
         res = requests.post(f"{URL_BACKEND}/continue", json=payload)
@@ -78,7 +83,6 @@ async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if res.status_code == 200:
             laporan = res.json().get("laporan_akhir", "Gagal merangkum laporan.")
             await query.message.reply_text(f"📜 *LAPORAN INVESTASI AKHIR:*\n\n{laporan}")
-        
         else:
             await query.message.reply_text("❌ Gagal mengambil laporan akhir dari server.")
     except Exception as e:
